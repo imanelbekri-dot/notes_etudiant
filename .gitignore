@@ -1,16 +1,31 @@
-# Éléments à ne pas partager sur GitHub
 
-# Environnement virtuel
-.venv/
-
-# Fichiers temporaires
-__pycache__/
-
-# Base de données
-*.db
-
-# Réglages propres à ce poste
 .env
 
-# Résultats temporaires des tests
+# Local authentication tokens
+jetons.json
+.env.*
+!.env.example
+
+# Local authentication tokens
+jetons.json
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+backups/
+
+# Python
+__pycache__/
+*.py[cod]
 .pytest_cache/
+.venv/
+venv/
+
+# OS
+.DS_Store
+jetons.json
+.venv/
+notes.db
+__pycache__/
