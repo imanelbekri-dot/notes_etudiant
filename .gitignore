@@ -1,31 +1,24 @@
-
+# Environnement et configuration
+.venv/
 .env
-
-# Local authentication tokens
-jetons.json
 .env.*
 !.env.example
 
-# Local authentication tokens
+# Jetons d'authentification
 jetons.json
 
-# Databases
+# Fichiers Python temporaires
+__pycache__/
+*.py[cod]
+
+# Bases de données
 *.db
 *.sqlite
 *.sqlite3
 *.db-journal
 backups/
 
-# Python
-__pycache__/
-*.py[cod]
+# Résultats des tests
 .pytest_cache/
-.venv/
-venv/
-
-# OS
-.DS_Store
-jetons.json
-.venv/
-notes.db
-__pycache__/
+.coverage
+htmlcov/
