@@ -1,39 +1,39 @@
-# ============================================================
+
+# =================================================================
 # Application de consultation des notes des étudiants
-# ============================================================
+# =================================================================
 
 import os
+import math
 import sqlite3
 import auth
+
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
-
-# Fichier où sont conservées les notes de l'école
 DB = "notes.db"
 
 
-# Prépare le registre des notes au démarrage de l'application
 def init_db():
     with sqlite3.connect(DB) as con:
-        # Chaque note concerne un étudiant, dans un module
         con.execute(
             "CREATE TABLE IF NOT EXISTS notes "
             "(id INTEGER PRIMARY KEY, etudiant TEXT, module TEXT, note REAL)"
         )
 
-        # Si le registre est vide, on y inscrit deux notes d'exemple
         if con.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 0:
             con.executemany(
                 "INSERT INTO notes (etudiant, module, note) VALUES (?, ?, ?)",
-                [("Amina", "DevSecOps", 15.5), ("Youssef", "DevSecOps", 12.0)],
+                [
+                    ("Amina", "DevSecOps", 15.5),
+                    ("Youssef", "DevSecOps", 12.0),
+                ],
             )
 
 
 init_db()
 
 
-# Page d'accueil
 @app.route("/")
 def accueil():
     return (
@@ -44,87 +44,93 @@ def accueil():
     )
 
 
-# Indique que le service des notes est disponible
 @app.route("/health")
 def health():
-    return jsonify(status="ok")
+    return jsonify(status="ok", version="1.0")
 
 
-# Consultation des notes
-@app.route("/notes")
+@app.route("/notes", methods=["GET"])
 def lister_notes():
     etudiant = request.args.get("etudiant", "")
 
-    with sqlite3.connect(DB) as con:
-        rows = con.execute(
-            "SELECT id, etudiant, module, note FROM notes WHERE etudiant LIKE ?",
-            (f"%{etudiant}%",),
-        ).fetchall()
+    try:
+        with sqlite3.connect(DB) as con:
+            rows = con.execute(
+                "SELECT id, etudiant, module, note "
+                "FROM notes WHERE etudiant LIKE ?",
+                (f"%{etudiant}%",),
+            ).fetchall()
 
-    return jsonify(
-        [{"id": r[0], "etudiant": r[1], "module": r[2], "note": r[3]} for r in rows]
-    )
+        return jsonify([
+            {
+                "id": r[0],
+                "etudiant": r[1],
+                "module": r[2],
+                "note": r[3],
+            }
+            for r in rows
+        ])
+
+    except sqlite3.Error:
+        return jsonify(erreur="Erreur interne du serveur"), 500
 
 
-# Démarrage du service
-# Modification d'une note par l'enseignant
-@app.route("/notes/<note_id>", methods=["PUT"])
-
-@app.route("/notes/<note_id>", methods=["PUT"])
+@app.route("/notes/<int:note_id>", methods=["PUT"])
 def modifier_note(note_id):
+
+    # 1. Vérifier l'identification
     utilisateur = auth.utilisateur_connecte()
 
     if utilisateur is None:
         return jsonify(erreur="Authentification requise"), 401
 
+    # 2. Vérifier le rôle
     if utilisateur.get("role") != "enseignant":
         return jsonify(erreur="Accès interdit"), 403
 
+    # 3. Vérifier les données
     donnees = request.get_json(silent=True)
 
-    if not isinstance(donnees, dict):
-        return jsonify(erreur="Données invalides"), 400
-
-    note = donnees.get("note")
-
-    if isinstance(note, bool) or not isinstance(note, (int, float)):
+    if not isinstance(donnees, dict) or "note" not in donnees:
         return jsonify(erreur="Note invalide"), 400
 
-    if not 0 <= note <= 20:
-        return jsonify(erreur="Note invalide"), 400
+    note = donnees["note"]
 
+    if (
+        isinstance(note, bool)
+        or not isinstance(note, (int, float))
+        or not math.isfinite(note)
+        or not 0 <= note <= 20
+    ):
+        return jsonify(erreur="La note doit être un nombre entre 0 et 20"), 400
+
+    # 4. Vérifier le module et modifier la note
     try:
         with sqlite3.connect(DB) as con:
-            curseur = con.execute(
-                "UPDATE notes SET note = ? WHERE id = ? AND module = ?",
-                (note, note_id, utilisateur.get("module"))
-            )
+            ligne = con.execute(
+                "SELECT module FROM notes WHERE id = ?",
+                (note_id,),
+            ).fetchone()
 
-            if curseur.rowcount == 0:
-                return jsonify(erreur="Note introuvable ou accès interdit"), 403
+            if ligne is None:
+                return jsonify(erreur="Note introuvable"), 404
+
+            if utilisateur.get("module") != ligne[0]:
+                return jsonify(erreur="Accès interdit à ce module"), 403
+
+            con.execute(
+                "UPDATE notes SET note = ? WHERE id = ?",
+                (note, note_id),
+            )
 
         return jsonify(message="Note modifiée avec succès"), 200
 
-    except Exception:
-        app.logger.exception("Erreur lors de la modification")
+    except sqlite3.Error:
         return jsonify(erreur="Erreur interne du serveur"), 500
-
-    # Clé du service qui prévient l'étudiant par e-mail
-    token = "sk_live_51H8ecole"
-    try:
-        con = sqlite3.connect(DB)
-        # Enregistre la nouvelle note
-        con.execute("UPDATE notes SET note = " + request.args["note"]
-                    + " WHERE id = " + note_id)
-        con.commit()
-        # Garde une trace de la modification
-        print("Modification par", request.remote_addr, request.args)
-        return "OK"
-    except Exception as e:
-        # En cas de problème, informe l'utilisateur
-        return str(e), 500
 
 
 if __name__ == "__main__":
-    app.run(host=os.environ.get("APP_HOST", "127.0.0.1"), port=5000)
-    
+    app.run(
+        host=os.environ.get("APP_HOST", "127.0.0.1"),
+        port=5000,
+    )
