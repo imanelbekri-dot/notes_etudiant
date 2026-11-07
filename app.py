@@ -22,13 +22,12 @@ def init_db():
         )
 
         if con.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 0:
-            con.execute(
+            con.executemany(
                 "INSERT INTO notes (etudiant, module, note) VALUES (?, ?, ?)",
-                ("Amina", "DevSecOps", 15.5),
-            )
-            con.execute(
-                "INSERT INTO notes (etudiant, module, note) VALUES (?, ?, ?)",
-                ("Youssef", "DevSecOps", 12.0),
+                [
+                    ("Amina", "DevSecOps", 15.5),
+                    ("Youssef", "DevSecOps", 12.0),
+                ],
             )
 
 
@@ -78,6 +77,7 @@ def lister_notes():
 
 @app.route("/notes/<int:note_id>", methods=["PUT"])
 def modifier_note(note_id):
+
     # 1. Vérifier l'identification
     utilisateur = auth.utilisateur_connecte()
 
@@ -88,7 +88,7 @@ def modifier_note(note_id):
     if utilisateur.get("role") != "enseignant":
         return jsonify(erreur="Accès interdit"), 403
 
-    # 3. Vérifier la validité de la note
+    # 3. Vérifier les données
     donnees = request.get_json(silent=True)
 
     if not isinstance(donnees, dict) or "note" not in donnees:
@@ -102,9 +102,7 @@ def modifier_note(note_id):
         or not math.isfinite(note)
         or not 0 <= note <= 20
     ):
-        return jsonify(
-            erreur="La note doit être un nombre entre 0 et 20"
-        ), 400
+        return jsonify(erreur="La note doit être un nombre entre 0 et 20"), 400
 
     # 4. Vérifier le module et modifier la note
     try:
@@ -118,9 +116,7 @@ def modifier_note(note_id):
                 return jsonify(erreur="Note introuvable"), 404
 
             if utilisateur.get("module") != ligne[0]:
-                return jsonify(
-                    erreur="Accès interdit à ce module"
-                ), 403
+                return jsonify(erreur="Accès interdit à ce module"), 403
 
             con.execute(
                 "UPDATE notes SET note = ? WHERE id = ?",
@@ -130,7 +126,6 @@ def modifier_note(note_id):
         return jsonify(message="Note modifiée avec succès"), 200
 
     except sqlite3.Error:
-        # Ne pas exposer les détails techniques
         return jsonify(erreur="Erreur interne du serveur"), 500
 
 
