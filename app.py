@@ -4,7 +4,7 @@
 
 import os
 import sqlite3
-
+import auth
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -69,7 +69,46 @@ def lister_notes():
 # Démarrage du service
 # Modification d'une note par l'enseignant
 @app.route("/notes/<note_id>", methods=["PUT"])
+
+@app.route("/notes/<note_id>", methods=["PUT"])
 def modifier_note(note_id):
+    utilisateur = auth.utilisateur_connecte()
+
+    if utilisateur is None:
+        return jsonify(erreur="Authentification requise"), 401
+
+    if utilisateur.get("role") != "enseignant":
+        return jsonify(erreur="Accès interdit"), 403
+
+    donnees = request.get_json(silent=True)
+
+    if not isinstance(donnees, dict):
+        return jsonify(erreur="Données invalides"), 400
+
+    note = donnees.get("note")
+
+    if isinstance(note, bool) or not isinstance(note, (int, float)):
+        return jsonify(erreur="Note invalide"), 400
+
+    if not 0 <= note <= 20:
+        return jsonify(erreur="Note invalide"), 400
+
+    try:
+        with sqlite3.connect(DB) as con:
+            curseur = con.execute(
+                "UPDATE notes SET note = ? WHERE id = ? AND module = ?",
+                (note, note_id, utilisateur.get("module"))
+            )
+
+            if curseur.rowcount == 0:
+                return jsonify(erreur="Note introuvable ou accès interdit"), 403
+
+        return jsonify(message="Note modifiée avec succès"), 200
+
+    except Exception:
+        app.logger.exception("Erreur lors de la modification")
+        return jsonify(erreur="Erreur interne du serveur"), 500
+
     # Clé du service qui prévient l'étudiant par e-mail
     token = "sk_live_51H8ecole"
     try:
